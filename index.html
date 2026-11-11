@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <meta name="description" content="OncoCurate synthetic demonstration of a clinical cancer registry abstracting workspace." />
-  <title>OncoCurate — Cancer Registry Abstracting Workspace</title>
+  <meta name="description" content="Cancer Registry Office — Data Extraction and clinical abstract review workspace." />
+  <title>Cancer Registry Office — Data Extraction</title>
   <link rel="stylesheet" href="src/styles.css" />
 </head>
 <body>
@@ -13,8 +13,8 @@
     <div class="brand-group">
       <div class="brand-mark" aria-hidden="true" id="brand-icon"></div>
       <div class="brand-text">
-        <h1>OncoCurate <span class="brand-badge">Registry Workbench</span></h1>
-        <p>Clinical Cancer Registry Abstracting • Evidence-linked review workspace</p>
+        <h1>Cancer Registry Office <span class="brand-badge">Data Extraction</span></h1>
+        <p>Clinical Cancer Registry Data Extraction • English abstract review workspace</p>
       </div>
     </div>
     <div class="header-controls">
@@ -53,15 +53,15 @@
           <div class="dropzone" id="case-dropzone" role="button" tabindex="0" aria-label="Upload medical case documents">
             <div class="dropzone-icon" id="case-upload-icon"></div>
             <h4>Upload source medical records</h4>
-            <p>Drop pathology, imaging, discharge or treatment files</p>
-            <p style="margin-top:4px;color:#94a3b8">PDF, DOCX, TXT • local browser preview</p>
+            <p>Drop a text-searchable PDF to extract and suggest abstract fields</p>
+            <p style="margin-top:4px;color:#94a3b8">PDF extraction runs in this browser • scanned-image PDFs need OCR</p>
           </div>
           <input type="file" id="case-file-input" accept=".pdf,.doc,.docx,.txt,application/pdf,text/plain" multiple hidden />
           <div class="file-list" id="case-file-list"></div>
           <div style="margin-top:9px">
             <div class="ingest-title" id="paste-title"></div>
             <textarea class="raw-text-area" id="raw-text" aria-label="Paste de-identified source text" placeholder="Paste de-identified source text here to make it available as the source record preview. Sample case text is synthetic."></textarea>
-            <div style="font-size:10.5px;color:#b45309;margin-top:5px">Do not upload real patient data to this demo. Files remain in this browser session; no server processing.</div>
+            <div style="font-size:10.5px;color:#b45309;margin-top:5px">Use only records approved by your organization's privacy policy. Files are processed in this browser and are not sent to this app's server.</div>
           </div>
         </div>
         <div class="ingest-card">
@@ -79,10 +79,11 @@
         <div class="pipeline-box">
           <div style="display:flex;align-items:center;justify-content:space-between">
             <div class="ingest-title" style="color:#fff" id="pipeline-title"></div>
-            <span style="font-size:10px;color:#94a3b8;font-family:var(--font-mono)">LOCAL DEMO</span>
+            <span style="font-size:10px;color:#94a3b8;font-family:var(--font-mono)">LOCAL BROWSER</span>
           </div>
           <div class="pipeline-steps" id="pipeline-steps"></div>
           <button class="btn btn-clinical" id="process-button" style="width:100%;margin-top:10px;justify-content:center"></button>
+          <div id="pipeline-status" aria-live="polite"></div>
         </div>
       </div>
       <div class="left-panel-body" id="left-source" style="display:none">
@@ -93,10 +94,10 @@
     </aside>
 
     <section class="right-panel" aria-label="Interactive abstract form">
-      <div class="demo-notice no-print"><strong>FICTIONAL TRAINING DATA</strong><span>Do not use for clinical care or registry submission. Verify all real abstracts against source records and current official standards.</span></div>
+      <div class="demo-notice no-print"><strong id="demo-notice-title">FICTIONAL TRAINING DATA</strong><span id="demo-notice-copy">Do not use for clinical care or registry submission. Verify all abstracts against source records and current official standards.</span></div>
       <div class="print-formal-header">
         <div class="print-header-grid">
-          <div class="print-header-title"><h1>Oncology Registry Abstract</h1><p>Evidence-linked review copy • Synthetic demonstration only • Verify all fields against authoritative sources</p></div>
+          <div class="print-header-title"><h1>Cancer Registry Office — Data Extraction</h1><p id="print-subtitle">Evidence-linked review copy • Synthetic demonstration only • Verify all fields against authoritative sources</p></div>
           <div style="text-align:right;font-size:8.5pt"><strong>Registry / Accession</strong><br><span id="print-registry-id"></span></div>
         </div>
         <div><strong>Confidentiality:</strong> Never use synthetic demo content for care or submit it as a real registry record.</div>
@@ -117,7 +118,7 @@
       <div class="form-scroll-area" id="form-scroll-area">
         <div class="print-patient-banner" id="print-patient-banner"></div>
         <div id="form-container"></div>
-        <div class="print-formal-footer"><span>Abstractor: <strong id="print-abstractor"></strong></span><span>Review date: <strong id="print-date"></strong></span><span>Not for clinical use • Synthetic record</span></div>
+        <div class="print-formal-footer"><span>Abstractor: <strong id="print-abstractor"></strong></span><span>Review date: <strong id="print-date"></strong></span><span id="print-footer-notice">Not for clinical use • Synthetic record</span></div>
       </div>
     </section>
   </main>

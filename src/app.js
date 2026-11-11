@@ -1,5 +1,6 @@
 import { ICONS, SECTIONS, SCHEMA_FIELDS, ICDO_TOPOGRAPHY_LIST, ICDO_MORPHOLOGY_LIST, BUILTIN_REFERENCE_MANUALS } from './schema.js';
 import { DEMO_CASES, INITIAL_REFERENCE_TEXT } from './cases.js';
+import { extractAbstractFromText } from './field-extractor.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -22,19 +23,31 @@ const state = {
   referenceFiles: [],
   pastedText: '',
   refEnabled: new Set(BUILTIN_REFERENCE_MANUALS.map(ref => ref.id)),
-  processStatus: 'idle'
+  processStatus: 'idle',
+  customCase: null,
+  customSource: null,
+  extraction: { status: 'idle', pages: 0, fields: 0, message: '' },
+  confidence: {},
+  evidenceSource: {},
+  extractionConflicts: {}
 };
 
-const activeCase = () => DEMO_CASES.find(item => item.id === state.caseId) || DEMO_CASES[0];
+const activeCase = () => state.customCase || DEMO_CASES.find(item => item.id === state.caseId) || DEMO_CASES[0];
 const getField = id => SCHEMA_FIELDS.find(field => field.id === id);
 const sectionName = id => SECTIONS.find(section => section.id === id)?.title || '';
 
 function initData(caseId = state.caseId) {
   const demo = DEMO_CASES.find(item => item.id === caseId) || DEMO_CASES[0];
   state.caseId = demo.id;
+  state.customCase = null;
+  state.customSource = null;
   state.values = { ...demo.values };
   state.remarks = { ...demo.remarks };
   state.edited = new Set();
+  state.confidence = {};
+  state.evidenceSource = {};
+  state.extractionConflicts = {};
+  state.extraction = { status: 'idle', pages: 0, fields: 0, message: '' };
 }
 
 function setIconsAndStaticLabels() {
@@ -70,10 +83,15 @@ function setIconsAndStaticLabels() {
   $('#validation-heading').innerHTML = `${ICONS.activity}<span>Live validation & cross-field edits</span>`;
 }
 
+function renderCaseSelector() {
+  const customOption = state.customCase ? `<option value="uploaded">Uploaded source — ${escapeHTML(state.customCase.title)}</option>` : '';
+  $('#demo-case-select').innerHTML = customOption + DEMO_CASES.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.title)} — ${escapeHTML(item.subtitle)}</option>`).join('');
+  $('#demo-case-select').value = state.customCase ? 'uploaded' : state.caseId;
+}
+
 function initCaseSelector() {
-  $('#demo-case-select').innerHTML = DEMO_CASES.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.title)} — ${escapeHTML(item.subtitle)}</option>`).join('');
-  $('#demo-case-select').value = state.caseId;
-  $('#demo-case-select').addEventListener('change', event => {
+  renderCaseSelector();
+  $('#demo-case-select').addEventListener('change', event => { if (event.target.value === 'uploaded') return;
     initData(event.target.value);
     state.activeSource = 'demo';
     state.processStatus = 'idle';
@@ -97,10 +115,13 @@ function validateAbstract() {
     const value = valueFor(field).trim();
     if (field.required && !value) add(field.id, 'error', `${field.code} ${field.name} is required.`, 'COMPLETENESS');
   }
+  for (const [fieldId, conflict] of Object.entries(state.extractionConflicts)) {
+    add(fieldId, 'warning', `PDFs disagree: “${conflict.first.value}” in ${conflict.first.source} versus “${conflict.second.value}” in ${conflict.second.source}. Review both excerpts and choose a value.`, 'SOURCE CONFLICT');
+  }
   const nid = valueFor(getField('F01')).replace(/\D/g, '');
   if (nid && nid !== '999999999999' && !/^\d{12}$/.test(nid)) add('F01', 'error', 'National ID must contain exactly 12 digits (or the approved unknown sentinel).', 'FORMAT');
-  const arabic = valueFor(getField('F03')).trim();
-  if (arabic && (!/[\u0600-\u06FF]/.test(arabic) || /[A-Za-z]/.test(arabic))) add('F03', 'error', 'Arabic name should use Arabic script only; remove Latin-script letters.', 'LANGUAGE');
+  const englishName = valueFor(getField('F03')).trim();
+  if (englishName && /[\u0600-\u06FF]/.test(englishName)) add('F03', 'error', 'This field is configured for English/Latin-script spelling. Enter the documented English transliteration.', 'LANGUAGE');
   const dates = ['F10', 'F25', 'F26', 'F47', 'F55'];
   for (const id of dates) {
     const value = valueFor(getField(id)).trim();
@@ -165,8 +186,12 @@ function validateAbstract() {
 
 function renderRibbon() {
   const demo = activeCase();
+  $('#demo-notice-title').textContent = state.customCase ? 'LOCAL PDF EXTRACTION · HUMAN REVIEW REQUIRED' : 'FICTIONAL TRAINING DATA';
+  $('#demo-notice-copy').textContent = state.customCase
+    ? 'Automated suggestions may be incomplete or wrong. Confirm every value against the source and current registry standards before export.'
+    : 'Do not use for clinical care or registry submission. Verify all abstracts against source records and current official standards.';
   const name = state.values.F02 || 'Patient identity not entered';
-  const arabic = state.values.F03 || '';
+  const englishTransliteration = state.values.F03 || '';
   const initials = name.split(/\s+/).slice(0,2).map(word => word[0] || '').join('').toUpperCase();
   const issues = validateAbstract();
   const errors = issues.filter(item => item.severity === 'error').length;
@@ -176,11 +201,13 @@ function renderRibbon() {
   const site = state.values.F32 || 'Site pending';
   const stage = state.values.F39 || state.values.F42 || 'Stage pending';
   $('#patient-ribbon').innerHTML = `
-    <div class="patient-identity-block"><div class="patient-avatar">${escapeHTML(initials || '—')}</div><div class="patient-names"><div class="patient-name-row"><span class="patient-name-en">${escapeHTML(name)}</span>${arabic ? `<span class="patient-name-ar" dir="rtl">${escapeHTML(arabic)}</span>` : ''}</div><div class="patient-submeta"><span>MRN <code>${escapeHTML(state.values.F04 || '—')}</code></span><span>DOB ${escapeHTML(state.values.F10 || '—')}</span><span>${escapeHTML(state.values.F13 || 'Sex pending')}</span><span>${escapeHTML(demo.title)}</span></div></div></div>
+    <div class="patient-identity-block"><div class="patient-avatar">${escapeHTML(initials || '—')}</div><div class="patient-names"><div class="patient-name-row"><span class="patient-name-en">${escapeHTML(name)}</span>${englishTransliteration && englishTransliteration !== name ? `<span class="patient-name-alt">${escapeHTML(englishTransliteration)}</span>` : ''}</div><div class="patient-submeta"><span>MRN <code>${escapeHTML(state.values.F04 || '—')}</code></span><span>DOB ${escapeHTML(state.values.F10 || '—')}</span><span>${escapeHTML(state.values.F13 || 'Sex pending')}</span><span>${escapeHTML(demo.title)}</span></div></div></div>
     <div class="ribbon-metrics"><span class="clinical-pill icdo">${ICONS.activity}${escapeHTML(site)}</span><span class="clinical-pill stage">${escapeHTML(stage)}</span><button class="clinical-pill ${errors ? 'valid-err' : warnings ? 'valid-warn' : 'valid-ok'}" id="ribbon-validation">${errors ? ICONS.alertOctagon : warnings ? ICONS.alertTriangle : ICONS.checkCircle}<span>${errors ? `${errors} errors` : warnings ? `${warnings} review` : 'Checks clear'}</span></button><div class="completeness-box"><div class="completeness-label"><span>COMPLETENESS</span><span>${percent}%</span></div><div class="completeness-bar"><div class="completeness-fill" style="width:${percent}%"></div></div></div></div>`;
   $('#ribbon-validation').addEventListener('click', () => { state.drawerOpen = true; renderValidation(); $('#validation-drawer').scrollIntoView({ block: 'nearest' }); });
   $('#print-registry-id').textContent = `${state.values.H01 || '—'} / ${state.values.H03 || '—'}`;
-  $('#print-patient-banner').innerHTML = `<div><strong>Patient:</strong> ${escapeHTML(name)} ${arabic ? `(${escapeHTML(arabic)})` : ''} &nbsp; <strong>MRN:</strong> ${escapeHTML(state.values.F04 || '—')} &nbsp; <strong>Sex:</strong> ${escapeHTML(state.values.F13 || '—')} &nbsp; <strong>DOB:</strong> ${escapeHTML(state.values.F10 || '—')}</div>`;
+  $('#print-subtitle').textContent = state.customCase ? 'PDF-extracted review copy • Verify every suggestion against the source document and current standards' : 'Evidence-linked review copy • Synthetic demonstration only • Verify all fields against authoritative sources';
+  $('#print-footer-notice').textContent = state.customCase ? 'Automated suggestions are not validated coding • Human review required' : 'Not for clinical use • Synthetic record';
+  $('#print-patient-banner').innerHTML = `<div><strong>Patient:</strong> ${escapeHTML(name)} ${englishTransliteration && englishTransliteration !== name ? `(${escapeHTML(englishTransliteration)})` : ''} &nbsp; <strong>MRN:</strong> ${escapeHTML(state.values.F04 || '—')} &nbsp; <strong>Sex:</strong> ${escapeHTML(state.values.F13 || '—')} &nbsp; <strong>DOB:</strong> ${escapeHTML(state.values.F10 || '—')}</div>`;
   $('#print-abstractor').textContent = state.values.H04 || '—';
   $('#print-date').textContent = todayDisplay();
 }
@@ -258,8 +285,9 @@ function renderField(field, resultMap) {
     state.edited.has(field.id) ? 'row-edited' : ''
   ].filter(Boolean).join(' ');
   const evidence = state.remarks[field.id] || 'No field-specific evidence note supplied. Verify this value against the source record and current registry rules.';
+  const confidence = state.confidence[field.id];
   return `<div class="${rowClass}" id="row-${field.id}" data-row-field="${field.id}">
-    <div class="field-meta-col"><div class="field-code-line"><span class="field-num-badge ${field.isHeader ? 'header-badge' : ''}">${escapeHTML(field.code)}</span><span class="field-std-tag">${escapeHTML(field.standard || 'NCR')}</span>${state.edited.has(field.id) ? '<span class="edited-tag">EDITED</span>' : ''}</div><div class="field-label-text">${escapeHTML(field.name)}${field.required ? ' <span style="color:#dc2626">*</span>' : ''}</div><div class="field-hint-text">${escapeHTML(field.hint || '')}</div></div>
+    <div class="field-meta-col"><div class="field-code-line"><span class="field-num-badge ${field.isHeader ? 'header-badge' : ''}">${escapeHTML(field.code)}</span><span class="field-std-tag">${escapeHTML(field.standard || 'NCR')}</span>${confidence ? `<span class="extraction-tag ${confidence}">PDF · ${escapeHTML(confidence)}</span>` : ''}${state.edited.has(field.id) ? '<span class="edited-tag">EDITED</span>' : ''}</div><div class="field-label-text">${escapeHTML(field.name)}${field.required ? ' <span style="color:#dc2626">*</span>' : ''}</div><div class="field-hint-text">${escapeHTML(field.hint || '')}</div></div>
     <div class="field-value-col">${fieldControl(field)}${issues.map(item => `<div class="inline-validation-msg ${item.severity}"><span><strong>${escapeHTML(item.rule)}:</strong> ${escapeHTML(item.message)}</span></div>`).join('')}</div>
     <div class="field-remarks-col"><div class="remarks-box"><div class="remarks-top-bar"><span class="evidence-badge">${ICONS.fileText} Source / rationale</span><button class="locate-btn" data-locate="${field.id}" title="Locate supporting evidence in source record">${ICONS.locate} Locate</button></div><textarea class="remarks-input" data-remark="${field.id}" aria-label="Evidence and rationale for ${escapeHTML(field.name)}">${escapeHTML(evidence)}</textarea></div></div>
   </div>`;
@@ -308,6 +336,7 @@ function onFieldInput(event) {
   const field = event.currentTarget.dataset.field;
   state.values[field] = event.currentTarget.value;
   state.edited.add(field);
+  delete state.extractionConflicts[field];
   clearTimeout(renderTimer);
   renderRibbon();
   renderFilterPills();
@@ -340,15 +369,28 @@ function renderValidation() {
 
 function renderPipeline() {
   const hasCaseFiles = state.documents.length > 0 || Boolean(state.pastedText);
-  const ready = state.processStatus === 'done';
+  const extracting = state.extraction.status === 'extracting';
+  const ready = state.extraction.status === 'complete' || state.processStatus === 'done';
   const steps = [
     ['Source ingestion', hasCaseFiles ? 'done' : 'done'],
     ['Reference rules selected', state.refEnabled.size || state.referenceFiles.length ? 'done' : 'running'],
-    ['Field mapping & consistency checks', ready ? 'done' : 'running'],
-    ['Human registrar review', 'running']
+    ['PDF text extraction & field suggestions', ready ? 'done' : 'running'],
+    ['Registrar review & correction', 'running']
   ];
   $('#pipeline-steps').innerHTML = steps.map(([label, status], index) => `<div class="pipeline-step ${status}"><span class="step-dot"></span><span>${index + 1}. ${label}${status === 'done' ? ' — complete' : status === 'running' ? ' — pending review' : ''}</span></div>`).join('');
-  $('#process-button').innerHTML = ready ? `${ICONS.checkCircle}<span>Re-run demo checks</span>` : `${ICONS.sparkles}<span>Run demo validation</span>`;
+  const isCustom = Boolean(state.customCase || state.pastedText.trim());
+  $('#process-button').disabled = extracting;
+  $('#process-button').innerHTML = extracting
+    ? `${ICONS.activity}<span>${escapeHTML(state.extraction.message || 'Reading PDF…')}</span>`
+    : isCustom
+      ? `${ICONS.sparkles}<span>${ready ? 'Re-extract source fields' : state.customCase ? (/\.pdf$/i.test(state.customSource?.name || '') ? 'Extract PDF & fill fields' : 'Extract source text & fill fields') : 'Extract pasted text & fill fields'}</span>`
+      : `${ICONS.checkCircle}<span>Run demo validation</span>`;
+  const status = state.extraction.status === 'complete'
+    ? `<div class="extraction-status success">${ICONS.checkCircle}<span>Read ${state.extraction.pages} page${state.extraction.pages === 1 ? '' : 's'} · suggested ${state.extraction.fields} field${state.extraction.fields === 1 ? '' : 's'}. Verify every suggestion and edit as needed.</span></div>`
+    : state.extraction.status === 'error'
+      ? `<div class="extraction-status error">${ICONS.alertTriangle}<span>${escapeHTML(state.extraction.message)}</span></div>`
+      : isCustom ? `<div class="extraction-status">${ICONS.shield}<span>Runs locally in your browser. No OCR for scanned PDFs; no data is uploaded.</span></div>` : `<div class="extraction-status">${ICONS.shield}<span>Built-in demo checks are illustrative; not registry certification.</span></div>`;
+  $('#pipeline-status').innerHTML = status;
 }
 
 function renderReferenceStandards() {
@@ -370,7 +412,14 @@ function renderFileList(type) {
     const arr = kind === 'case' ? state.documents : state.referenceFiles;
     const removed = arr.splice(Number(rawIndex), 1)[0];
     if (removed?.url) URL.revokeObjectURL(removed.url);
-    if (kind === 'case' && state.activeSource === removed?.id) state.activeSource = 'demo';
+    if (kind === 'case' && state.customSource?.id === removed?.id) {
+      state.customSource = state.documents.at(-1) || null;
+      state.activeSource = state.customSource?.id || 'demo';
+      if (state.customSource && !state.customSource.text) state.extraction = { status: 'idle', pages: 0, fields: 0, message: '' };
+      renderAll();
+      return;
+    }
+    if (kind === 'case' && state.activeSource === removed?.id) state.activeSource = state.documents.at(-1)?.id || 'demo';
     renderFileList(kind);
     renderSourceViewer();
     renderPipeline();
@@ -379,23 +428,120 @@ function renderFileList(type) {
 function formatBytes(bytes = 0) { return bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`; }
 
 async function acceptFiles(files, type) {
+  const added = [];
   for (const file of files) {
     const isText = /\.txt$/i.test(file.name) || file.type === 'text/plain';
-    const entry = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, name: file.name, size: file.size, type: file.type, file, url: URL.createObjectURL(file), text: '', unsupported: false };
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+    const entry = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, name: file.name, size: file.size, type: file.type || (isPdf ? 'application/pdf' : ''), file, url: URL.createObjectURL(file), text: '', pages: 0, unsupported: false };
     if (isText) {
       try { entry.text = await file.text(); } catch { entry.text = ''; }
-    } else if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
-      // Browser preview only; no PDF text extraction or server upload is performed.
-    } else {
+    } else if (!isPdf) {
       entry.unsupported = true;
     }
     if (type === 'case') state.documents.push(entry); else state.referenceFiles.push(entry);
+    added.push(entry);
   }
   renderFileList(type);
-  if (type === 'case' && state.documents.length) state.activeSource = state.documents.at(-1).id;
-  renderSourceViewer();
+  if (type === 'case' && added.length) {
+    const target = added.at(-1);
+    state.activeSource = target.id;
+    if (!target.unsupported) {
+      startCustomCase(target);
+      toast('Reading the uploaded document locally and matching source evidence to abstract fields…', 'info');
+      await extractDocument(target);
+    } else {
+      renderSourceViewer(); renderPipeline();
+      toast('This file can be attached but automatic extraction supports text-based PDF and TXT only.', 'warn');
+    }
+  } else {
+    renderSourceViewer(); renderPipeline();
+    toast(`${files.length} reference file${files.length === 1 ? '' : 's'} attached locally. Reference manuals are not automatically parsed in this demo.`, 'info');
+  }
+}
+
+function startCustomCase(documentFile) {
+  state.customSource = documentFile;
+  state.customCase = {
+    id: 'uploaded',
+    title: documentFile.name.replace(/\.[^.]+$/, ''),
+    subtitle: 'Uploaded document · local field suggestions require human verification',
+    recordText: documentFile.text || '',
+    values: Object.fromEntries(SCHEMA_FIELDS.map(field => [field.id, ''])),
+    remarks: {}
+  };
+  state.caseId = 'uploaded';
+  state.values = { ...state.customCase.values };
+  state.remarks = {};
+  state.edited = new Set();
+  state.confidence = {};
+  state.evidenceSource = {};
+  state.extractionConflicts = {};
+  state.extraction = { status: 'idle', pages: 0, fields: 0, message: '' };
+  state.processStatus = 'idle';
+  state.activeSection = 'all'; state.filter = 'all'; state.search = '';
+  $('#field-search').value = '';
+  renderCaseSelector();
+  renderRibbon(); renderFilterPills(); renderSections(); renderForm(); renderValidation();
+  renderSourceViewer(); renderPipeline();
+}
+
+async function extractDocument(documentFile = state.customSource || state.documents.find(item => item.id === state.activeSource)) {
+  if (!documentFile) {
+    toast('Upload a text-searchable PDF to extract and suggest abstract fields.', 'warn');
+    return;
+  }
+  if (documentFile.unsupported) {
+    state.extraction = { status: 'error', pages: 0, fields: 0, message: 'Automatic extraction supports text-based PDF and TXT only.' };
+    renderPipeline();
+    return;
+  }
+  state.extraction = { status: 'extracting', pages: 0, fields: 0, message: 'Preparing local extraction…' };
   renderPipeline();
-  toast(type === 'case' ? `${files.length} source file${files.length === 1 ? '' : 's'} added for local preview; no server processing.` : `${files.length} reference file${files.length === 1 ? '' : 's'} attached locally. Automatic manual extraction is not available in this demo.`, 'info');
+  let text = documentFile.text || '';
+  try {
+    if (/\.pdf$/i.test(documentFile.name) || documentFile.type === 'application/pdf') {
+      const { extractPdfText } = await import('./pdf-extractor.js');
+      const result = await extractPdfText(documentFile.file, ({ page, pages }) => {
+        state.extraction.message = `Reading PDF page ${page} of ${pages}…`;
+        state.extraction.pages = pages;
+        renderPipeline();
+      });
+      text = result.text;
+      documentFile.pages = result.pages;
+    }
+    if (!text.trim()) throw new Error('No readable text was found in this document. A scanned/image PDF may require OCR, which is not enabled in this demo.');
+    documentFile.text = text;
+    state.customCase.recordText = text;
+    const suggestions = extractAbstractFromText(text);
+    for (const [fieldId, suggestion] of Object.entries(suggestions)) {
+      const priorValue = state.values[fieldId];
+      const priorSourceId = state.evidenceSource[fieldId];
+      const priorSourceName = state.documents.find(item => item.id === priorSourceId)?.name || (state.edited.has(fieldId) ? 'Manual edit' : 'Earlier source');
+      const differentSource = priorSourceId && priorSourceId !== documentFile.id;
+      if (priorValue && priorValue !== suggestion.value && (differentSource || state.edited.has(fieldId))) {
+        const previous = state.extractionConflicts[fieldId]?.first || { value: priorValue, source: priorSourceName };
+        const incoming = { value: suggestion.value, source: documentFile.name };
+        state.extractionConflicts[fieldId] = { first: previous, second: incoming };
+        state.remarks[fieldId] = `Conflicting source suggestions. ${previous.source}: “${previous.value}”. ${incoming.source}: “${incoming.value}”. Excerpts — earlier: “${state.remarks[fieldId] || ''}” · new: “${suggestion.evidence}”`;
+        state.confidence[fieldId] = 'medium';
+      } else {
+        if (!state.edited.has(fieldId)) state.values[fieldId] = suggestion.value;
+        state.remarks[fieldId] = `PDF excerpt: “${suggestion.evidence}”`;
+        state.confidence[fieldId] = suggestion.confidence;
+        state.evidenceSource[fieldId] = documentFile.id;
+      }
+    }
+    const count = Object.keys(suggestions).length;
+    state.extraction = { status: 'complete', pages: documentFile.pages || 1, fields: count, message: '' };
+    state.processStatus = 'done';
+    renderSourceViewer(); renderRibbon(); renderFilterPills(); renderSections(); renderForm(); renderValidation(); renderPipeline();
+    toast(count ? `Extracted text and proposed values for ${count} fields. Review every suggestion against the PDF.` : 'PDF text was read, but no confident field matches were found. Review the extracted text and enter values manually.', count ? 'success' : 'warn');
+  } catch (error) {
+    state.extraction = { status: 'error', pages: documentFile.pages || 0, fields: 0, message: error?.message || 'Could not read this document.' };
+    state.processStatus = 'idle';
+    renderPipeline(); renderSourceViewer();
+    toast(state.extraction.message, 'warn');
+  }
 }
 
 function setupUploads() {
@@ -416,19 +562,27 @@ function setupUploads() {
   $('#raw-text').addEventListener('input', event => {
     state.pastedText = event.target.value;
     if (state.pastedText) state.activeSource = 'pasted';
+    if (state.customCase) {
+      if (state.customSource?.id !== 'pasted') state.customSource = { id: 'pasted', name: 'Pasted source text.txt', text: '', type: 'text/plain', pages: 1 };
+      state.customSource.text = state.pastedText;
+      state.customCase.recordText = state.pastedText;
+      state.extraction = { status: 'idle', pages: 1, fields: 0, message: '' };
+      state.processStatus = 'idle';
+    }
     renderSourceViewer();
     renderPipeline();
   });
 }
 
 function sourceData() {
-  if (state.activeSource === 'pasted') return { id: 'pasted', name: 'Pasted source text', text: state.pastedText, type: 'text/plain' };
+  if (state.activeSource === 'pasted') return { id: 'pasted', name: 'Pasted source text', text: state.pastedText || state.customCase?.recordText || '', type: 'text/plain' };
   const doc = state.documents.find(item => item.id === state.activeSource);
   if (doc) return doc;
+  if (state.customCase) return state.customSource || { id: 'uploaded-text', name: state.customCase.title, text: state.customCase.recordText, type: 'text/plain' };
   return { id: 'demo', name: `${activeCase().title} — synthetic source`, text: activeCase().recordText, type: 'text/plain', demo: true };
 }
 function renderSourceViewer() {
-  const sources = [{ id: 'demo', name: 'Demo source' }];
+  const sources = state.customCase ? [] : [{ id: 'demo', name: 'Demo source' }];
   if (state.pastedText) sources.push({ id: 'pasted', name: 'Pasted text' });
   state.documents.forEach(doc => sources.push({ id: doc.id, name: doc.name }));
   $('#document-tabs').innerHTML = sources.map(source => `<button class="doc-subtab ${source.id === state.activeSource ? 'active' : ''}" data-source="${source.id}">${ICONS.fileText}${escapeHTML(source.name)}</button>`).join('');
@@ -436,7 +590,8 @@ function renderSourceViewer() {
   const source = sourceData();
   const header = `<div class="pdf-sheet-header"><strong>${ICONS.fileText}${escapeHTML(source.name)}</strong><span class="pdf-sheet-meta">${source.demo ? 'SYNTHETIC DEMO' : escapeHTML(source.type || 'SOURCE FILE')}</span></div>`;
   if (source.type === 'application/pdf' || /\.pdf$/i.test(source.name)) {
-    $('#source-viewer').innerHTML = `${header}<iframe class="pdf-embed-frame" title="Local PDF preview" src="${escapeHTML(source.url)}"></iframe>`;
+    const extractedText = source.text ? `<details class="pdf-text-details" open><summary>Extracted text · ${source.pages || state.extraction.pages || '—'} page(s)</summary><div class="pdf-sheet-content" id="source-text-content">${escapeHTML(source.text)}</div></details>` : `<div class="pdf-text-placeholder">${ICONS.activity}<span>Upload started. PDF text will appear here after local extraction.</span></div>`;
+    $('#source-viewer').innerHTML = `${header}<iframe class="pdf-embed-frame" title="Local PDF preview" src="${escapeHTML(source.url)}"></iframe>${extractedText}`;
   } else if (source.text) {
     $('#source-viewer').innerHTML = `${header}<div class="pdf-sheet-content" id="source-text-content">${escapeHTML(source.text)}</div>`;
   } else if (source.unsupported) {
@@ -448,17 +603,23 @@ function renderSourceViewer() {
 
 function locateEvidence(fieldId) {
   const field = getField(fieldId);
+  const evidenceDoc = state.documents.find(item => item.id === state.evidenceSource[fieldId]);
+  if (evidenceDoc) state.activeSource = evidenceDoc.id;
+  else if (state.customSource?.id === state.evidenceSource[fieldId]) state.activeSource = state.customSource.id;
   const source = sourceData();
-  const candidates = [state.values[fieldId], ...(state.remarks[fieldId] || '').split(/[.;\n]/)].filter(item => item && item.length > 8);
+  const rawEvidence = (state.remarks[fieldId] || '').replace(/^PDF excerpt:\s*[“\"]?/, '').replace(/[”\"]\s*$/, '');
+  const candidates = [rawEvidence, state.values[fieldId], ...(state.remarks[fieldId] || '').split(/[.;\n]/)].filter(item => item && item.length > 8);
   const text = source.text || '';
   let index = -1;
   let match = '';
   for (const candidate of candidates) {
-    const cleaned = candidate.replace(/^\s*\d+\s*-\s*/, '').slice(0, 60).trim();
-    if (cleaned.length > 8) {
-      index = text.toLowerCase().indexOf(cleaned.toLowerCase());
-      if (index >= 0) { match = cleaned; break; }
+    const cleaned = candidate.replace(/^\s*\d+\s*-\s*/, '').replace(/\s+/g, ' ').trim();
+    const probes = [cleaned, cleaned.slice(0, 180), cleaned.slice(0, 80)];
+    for (const probe of probes) {
+      if (probe.length > 8) index = text.toLowerCase().indexOf(probe.toLowerCase());
+      if (index >= 0) { match = probe; break; }
     }
+    if (index >= 0) break;
   }
   if (state.leftTab !== 'source') {
     state.leftTab = 'source';
@@ -500,7 +661,7 @@ function syncLeftTab() {
 
 function showReferences() {
   const manuals = BUILTIN_REFERENCE_MANUALS.map(manual => `<div class="rule-block"><h4>${escapeHTML(manual.fullName)}</h4>${manual.rules.map(rule => `<div style="padding:8px 0;border-top:1px solid #e2e8f0"><strong style="color:#334155">${escapeHTML(rule.title)}</strong><p style="margin-top:4px">${escapeHTML(rule.body)}</p></div>`).join('')}</div>`).join('');
-  const notes = `<div class="rule-block" style="background:#fffbeb;border-color:#fde68a"><h4 style="color:#b45309">Important limitations</h4><p>This is a client-side, synthetic demonstration. The bundled excerpts are short illustrative summaries, not complete or authoritative manuals. No LLM, PDF text extraction, coding engine, or registry service is connected. Verify current edition-specific rules with the official source and a qualified registrar.</p><p style="margin-top:8px"><strong>Privacy:</strong> Do not upload identifiable health information. Uploaded files are handled locally by this page and are not transmitted by this application.</p></div>`;
+  const notes = `<div class="rule-block" style="background:#fffbeb;border-color:#fde68a"><h4 style="color:#b45309">Important limitations</h4><p>Text-searchable PDFs are extracted locally in your browser with PDF.js, then deterministic rules propose field values from explicit source text. The interface and abstract labels are English; source evidence is quoted verbatim. This is not an LLM, OCR, authoritative coding engine, or registry service. Suggestions may be incomplete or wrong; verify every field with the source and a qualified registrar.</p><p style="margin-top:8px"><strong>Privacy:</strong> PDF bytes and extracted text are not sent to this app's server. Use only records approved by your organization's privacy and security policies.</p></div>`;
   openModal('Reference standards & illustrative rules', `${notes}${manuals}`);
 }
 function openModal(title, html) {
@@ -512,6 +673,7 @@ function closeModal() { $('#modal-backdrop').classList.remove('open'); }
 
 function renderAll() {
   setIconsAndStaticLabels();
+  renderCaseSelector();
   renderReferenceStandards();
   renderFileList('case'); renderFileList('reference');
   renderRibbon(); renderFilterPills(); renderSections(); renderForm(); renderValidation(); renderPipeline(); renderSourceViewer();
@@ -527,9 +689,23 @@ function setupInteractions() {
     if (event.key === 'Escape') { $('#modal-backdrop').classList.remove('open'); $('#export-dropdown').classList.remove('open'); }
   });
   $('#layout-toggle').addEventListener('click', () => { state.sourceCollapsed = !state.sourceCollapsed; $('#workspace-shell').classList.toggle('layout-collapsed-left', state.sourceCollapsed); $('#layout-toggle').innerHTML = `${ICONS.columns}<span>${state.sourceCollapsed ? 'Show source' : 'Hide source'}</span>`; });
-  $('#reset-button').addEventListener('click', () => { initData(); state.processStatus = 'idle'; renderAll(); toast('Selected synthetic case restored.'); });
+  $('#reset-button').addEventListener('click', () => { initData(); state.activeSource = 'demo'; state.processStatus = 'idle'; renderAll(); toast('Selected synthetic case restored.'); });
   $$('.panel-tab').forEach(button => button.addEventListener('click', () => { state.leftTab = button.dataset.leftTab; syncLeftTab(); }));
-  $('#process-button').addEventListener('click', () => { state.processStatus = 'done'; state.drawerOpen = true; renderAll(); toast('Demo consistency checks completed. Human review is still required.', 'info'); });
+  $('#process-button').addEventListener('click', async () => {
+    state.drawerOpen = true;
+    if (state.customCase) {
+      await extractDocument(state.documents.find(item => item.id === state.activeSource));
+    } else if (state.pastedText.trim()) {
+      const pasted = { id: 'pasted', name: 'Pasted source text.txt', text: state.pastedText, type: 'text/plain', pages: 1 };
+      state.activeSource = 'pasted';
+      startCustomCase(pasted);
+      await extractDocument(pasted);
+    } else {
+      state.processStatus = 'done';
+      renderAll();
+      toast('Illustrative demo checks completed. Human registrar review is still required.', 'info');
+    }
+  });
   $('#validation-close').addEventListener('click', () => { state.drawerOpen = false; $('#validation-drawer').style.display = 'none'; });
   $('#references-button').addEventListener('click', showReferences);
   $('#modal-close').addEventListener('click', closeModal);
@@ -549,29 +725,34 @@ function rowsForExport() {
     field: field.name,
     value: state.values[field.id] || '',
     evidence: state.remarks[field.id] || '',
+    confidence: state.confidence[field.id] || '',
+    evidenceSource: state.documents.find(item => item.id === state.evidenceSource[field.id])?.name || '',
     standard: field.standard || ''
   }));
 }
 function abstractObject() {
   return {
     metadata: {
-      application: 'OncoCurate synthetic registry workbench',
+      application: 'Cancer Registry Office — Data Extraction',
       case: activeCase().title,
-      syntheticDemo: !state.documents.length && !state.pastedText,
+      syntheticDemo: !state.customCase,
+      sourceFileName: state.customSource?.name || null,
+      extractionMethod: state.customCase ? 'Browser-local PDF.js text extraction plus deterministic field matching' : 'Prefilled synthetic demonstration case',
       generatedAt: new Date().toISOString(),
       notice: 'For software demonstration only. Not clinical advice or registry submission. Verify values against source documents and current authoritative standards.'
     },
-    abstract: Object.fromEntries(SCHEMA_FIELDS.map(field => [field.code, { fieldId: field.id, name: field.name, section: sectionName(field.section), value: state.values[field.id] || '', evidence: state.remarks[field.id] || '' }])),
+    abstract: Object.fromEntries(SCHEMA_FIELDS.map(field => [field.code, { fieldId: field.id, name: field.name, section: sectionName(field.section), value: state.values[field.id] || '', evidence: state.remarks[field.id] || '', extractionConfidence: state.confidence[field.id] || null, evidenceSource: state.documents.find(item => item.id === state.evidenceSource[field.id])?.name || null }])),
     validation: validateAbstract()
   };
 }
 function markdownTable() {
   const esc = text => String(text || '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, '<br>');
-  return `# OncoCurate Cancer Registry Abstract — ${activeCase().title}\n\n> Synthetic demonstration / review copy only. Verify all data against authoritative source material and current registry standards.\n\n| Code | Field | Value | Evidence / rationale |\n|---|---|---|---|\n${rowsForExport().map(row => `| ${esc(row.code)} | ${esc(row.field)} | ${esc(row.value)} | ${esc(row.evidence)} |`).join('\n')}`;
+  const notice = state.customCase ? 'PDF-extracted suggestions; verify each field against the source before use.' : 'Synthetic demonstration only; verify all data against authoritative source material.';
+  return `# Cancer Registry Office — Data Extraction\n## Registry Abstract — ${activeCase().title}\n\n> ${notice}\n\n| Code | Field | Value | Evidence / rationale | Confidence / source |\n|---|---|---|---|---|\n${rowsForExport().map(row => `| ${esc(row.code)} | ${esc(row.field)} | ${esc(row.value)} | ${esc(row.evidence)} | ${esc(row.confidence)} ${esc(row.evidenceSource)} |`).join('\n')}`;
 }
 function tsv() {
   const quote = value => String(value || '').replace(/\t/g, ' ').replace(/\r?\n/g, ' ');
-  return ['Code\tSection\tField\tValue\tEvidence / rationale', ...rowsForExport().map(row => [row.code, row.section, row.field, row.value, row.evidence].map(quote).join('\t'))].join('\n');
+  return ['Code\tSection\tField\tValue\tEvidence / rationale\tConfidence\tEvidence source', ...rowsForExport().map(row => [row.code, row.section, row.field, row.value, row.evidence, row.confidence, row.evidenceSource].map(quote).join('\t'))].join('\n');
 }
 function csv() {
   const safe = value => {
@@ -579,7 +760,7 @@ function csv() {
     if (/^[\s]*[=+@\-]/.test(text)) text = `'${text}`;
     return `"${text.replace(/"/g, '""')}"`;
   };
-  const lines = [['Code','Section','Field','Value','Evidence / rationale','Standard'], ...rowsForExport().map(row => [row.code,row.section,row.field,row.value,row.evidence,row.standard])];
+  const lines = [['Code','Section','Field','Value','Evidence / rationale','Extraction confidence','Evidence source','Standard'], ...rowsForExport().map(row => [row.code,row.section,row.field,row.value,row.evidence,row.confidence,row.evidenceSource,row.standard])];
   return '\ufeff' + lines.map(line => line.map(safe).join(',')).join('\r\n');
 }
 async function copyText(text, what) {
@@ -607,8 +788,8 @@ function handleExport(action) {
   if (action === 'copy-markdown') copyText(markdownTable(), 'Markdown abstract');
   if (action === 'copy-json') copyText(JSON.stringify(abstractObject(), null, 2), 'JSON abstract');
   if (action === 'copy-tsv') copyText(tsv(), 'TSV abstract');
-  if (action === 'download-csv') { downloadFile(`oncocurate-${slug}-${stamp}.csv`, csv(), 'text/csv'); toast('CSV export downloaded.'); }
-  if (action === 'download-json') { downloadFile(`oncocurate-${slug}-${stamp}.json`, JSON.stringify(abstractObject(), null, 2), 'application/json'); toast('JSON export downloaded.'); }
+  if (action === 'download-csv') { downloadFile(`cancer-registry-extraction-${slug}-${stamp}.csv`, csv(), 'text/csv'); toast('CSV export downloaded.'); }
+  if (action === 'download-json') { downloadFile(`cancer-registry-extraction-${slug}-${stamp}.json`, JSON.stringify(abstractObject(), null, 2), 'application/json'); toast('JSON export downloaded.'); }
   if (action === 'print') { window.print(); }
 }
 
