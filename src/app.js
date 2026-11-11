@@ -120,8 +120,10 @@ function validateAbstract() {
   }
   const nid = valueFor(getField('F01')).replace(/\D/g, '');
   if (nid && nid !== '999999999999' && !/^\d{12}$/.test(nid)) add('F01', 'error', 'National ID must contain exactly 12 digits (or the approved unknown sentinel).', 'FORMAT');
-  const englishName = valueFor(getField('F03')).trim();
-  if (englishName && /[\u0600-\u06FF]/.test(englishName)) add('F03', 'error', 'This field is configured for English/Latin-script spelling. Enter the documented English transliteration.', 'LANGUAGE');
+  const englishName = valueFor(getField('F02')).trim();
+  if (englishName && /[\u0600-\u06FF]/.test(englishName)) add('F02', 'error', 'Enter the documented name in English/Latin script in this field.', 'LANGUAGE');
+  const arabicName = valueFor(getField('F03')).trim();
+  if (arabicName && !/[\u0600-\u06FF]/.test(arabicName)) add('F03', 'error', 'Enter the documented name in Arabic script in this field.', 'LANGUAGE');
   const dates = ['F10', 'F25', 'F26', 'F47', 'F55'];
   for (const id of dates) {
     const value = valueFor(getField(id)).trim();
@@ -191,7 +193,7 @@ function renderRibbon() {
     ? 'Automated suggestions may be incomplete or wrong. Confirm every value against the source and current registry standards before export.'
     : 'Do not use for clinical care or registry submission. Verify all abstracts against source records and current official standards.';
   const name = state.values.F02 || 'Patient identity not entered';
-  const englishTransliteration = state.values.F03 || '';
+  const arabicName = state.values.F03 || '';
   const initials = name.split(/\s+/).slice(0,2).map(word => word[0] || '').join('').toUpperCase();
   const issues = validateAbstract();
   const errors = issues.filter(item => item.severity === 'error').length;
@@ -201,13 +203,13 @@ function renderRibbon() {
   const site = state.values.F32 || 'Site pending';
   const stage = state.values.F39 || state.values.F42 || 'Stage pending';
   $('#patient-ribbon').innerHTML = `
-    <div class="patient-identity-block"><div class="patient-avatar">${escapeHTML(initials || '—')}</div><div class="patient-names"><div class="patient-name-row"><span class="patient-name-en">${escapeHTML(name)}</span>${englishTransliteration && englishTransliteration !== name ? `<span class="patient-name-alt">${escapeHTML(englishTransliteration)}</span>` : ''}</div><div class="patient-submeta"><span>MRN <code>${escapeHTML(state.values.F04 || '—')}</code></span><span>DOB ${escapeHTML(state.values.F10 || '—')}</span><span>${escapeHTML(state.values.F13 || 'Sex pending')}</span><span>${escapeHTML(demo.title)}</span></div></div></div>
+    <div class="patient-identity-block"><div class="patient-avatar">${escapeHTML(initials || '—')}</div><div class="patient-names"><div class="patient-name-row"><span class="patient-name-en">${escapeHTML(name)}</span>${arabicName && arabicName !== name ? `<span class="patient-name-alt" dir="rtl" lang="ar">${escapeHTML(arabicName)}</span>` : ''}</div><div class="patient-submeta"><span>MRN <code>${escapeHTML(state.values.F04 || '—')}</code></span><span>DOB ${escapeHTML(state.values.F10 || '—')}</span><span>${escapeHTML(state.values.F13 || 'Sex pending')}</span><span>${escapeHTML(demo.title)}</span></div></div></div>
     <div class="ribbon-metrics"><span class="clinical-pill icdo">${ICONS.activity}${escapeHTML(site)}</span><span class="clinical-pill stage">${escapeHTML(stage)}</span><button class="clinical-pill ${errors ? 'valid-err' : warnings ? 'valid-warn' : 'valid-ok'}" id="ribbon-validation">${errors ? ICONS.alertOctagon : warnings ? ICONS.alertTriangle : ICONS.checkCircle}<span>${errors ? `${errors} errors` : warnings ? `${warnings} review` : 'Checks clear'}</span></button><div class="completeness-box"><div class="completeness-label"><span>COMPLETENESS</span><span>${percent}%</span></div><div class="completeness-bar"><div class="completeness-fill" style="width:${percent}%"></div></div></div></div>`;
   $('#ribbon-validation').addEventListener('click', () => { state.drawerOpen = true; renderValidation(); $('#validation-drawer').scrollIntoView({ block: 'nearest' }); });
   $('#print-registry-id').textContent = `${state.values.H01 || '—'} / ${state.values.H03 || '—'}`;
   $('#print-subtitle').textContent = state.customCase ? 'PDF-extracted review copy • Verify every suggestion against the source document and current standards' : 'Evidence-linked review copy • Synthetic demonstration only • Verify all fields against authoritative sources';
   $('#print-footer-notice').textContent = state.customCase ? 'Automated suggestions are not validated coding • Human review required' : 'Not for clinical use • Synthetic record';
-  $('#print-patient-banner').innerHTML = `<div><strong>Patient:</strong> ${escapeHTML(name)} ${englishTransliteration && englishTransliteration !== name ? `(${escapeHTML(englishTransliteration)})` : ''} &nbsp; <strong>MRN:</strong> ${escapeHTML(state.values.F04 || '—')} &nbsp; <strong>Sex:</strong> ${escapeHTML(state.values.F13 || '—')} &nbsp; <strong>DOB:</strong> ${escapeHTML(state.values.F10 || '—')}</div>`;
+  $('#print-patient-banner').innerHTML = `<div><strong>Patient:</strong> ${escapeHTML(name)} ${arabicName ? `(<span dir="rtl" lang="ar">${escapeHTML(arabicName)}</span>)` : ''} &nbsp; <strong>MRN:</strong> ${escapeHTML(state.values.F04 || '—')} &nbsp; <strong>Sex:</strong> ${escapeHTML(state.values.F13 || '—')} &nbsp; <strong>DOB:</strong> ${escapeHTML(state.values.F10 || '—')}</div>`;
   $('#print-abstractor').textContent = state.values.H04 || '—';
   $('#print-date').textContent = todayDisplay();
 }
@@ -747,11 +749,11 @@ function rowsForExport() {
 function abstractObject() {
   return {
     metadata: {
-      application: 'Cancer Registry Office — Data Extraction',
+      application: 'Sijill Cancer Registry — Data Extraction',
       case: activeCase().title,
       syntheticDemo: !state.customCase,
       sourceFileName: state.customSource?.name || null,
-      extractionMethod: state.customCase ? 'Browser-local PDF.js text extraction plus deterministic field matching' : 'Prefilled synthetic demonstration case',
+      extractionMethod: state.customCase ? 'Browser-local PDF.js text extraction and Tesseract OCR plus deterministic field matching' : 'Prefilled synthetic demonstration case',
       generatedAt: new Date().toISOString(),
       notice: 'For software demonstration only. Not clinical advice or registry submission. Verify values against source documents and current authoritative standards.'
     },
