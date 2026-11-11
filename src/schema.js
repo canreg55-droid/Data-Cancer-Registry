@@ -209,10 +209,10 @@ export const SCHEMA_FIELDS = [
   },
   {
     id: 'F03', code: '03', section: 'sec1',
-    name: 'Full Name (English Transliteration)',
+    name: 'Full Name (Arabic)',
     standard: 'NCR Core',
-    type: 'text', required: true,
-    hint: 'Full legal name in Latin/English characters; use the documented English spelling and verify against the source identity record.'
+    type: 'text', arabic: true, required: true,
+    hint: 'Full legal name in Arabic script as documented in the identity record; do not translate or transliterate.'
   },
   {
     id: 'F04', code: '04', section: 'sec1',

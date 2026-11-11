@@ -22,12 +22,19 @@ Chemotherapy: not indicated
 test('extracts explicitly labeled demographics and preserves source evidence', () => {
   const fields = extractAbstractFromText(breastReport);
   assert.equal(fields.F02.value, 'Jane Doe');
-  assert.equal(fields.F03.value, 'Jane Doe');
+  assert.equal(fields.F03, undefined);
   assert.equal(fields.F04.value, 'MRN-7781');
   assert.equal(fields.F01.value, '123456789012');
   assert.equal(fields.F10.value, '02/01/1970');
   assert.equal(fields.F13.value, '2 - Female');
   assert.match(fields.F02.evidence, /Patient Name: Jane Doe/);
+});
+
+test('extracts a bilingual name into English and Arabic fields without translating either value', () => {
+  const fields = extractAbstractFromText('Patient Name: Layla Ali\nArabic Name: ليلى علي\nEnglish Name: Layla Ali');
+  assert.equal(fields.F02.value, 'Layla Ali');
+  assert.equal(fields.F03.value, 'ليلى علي');
+  assert.match(fields.F03.evidence, /Arabic Name: ليلى علي/);
 });
 
 test('maps directly documented pathology, TNM, stage and treatment to suggestions', () => {
@@ -50,10 +57,10 @@ test('does not confuse lymphoma stage with a solid tumor clinical stage or patho
   assert.match(fields.F43.value, /^1 - Present/);
 });
 
-test('leaves non-English extracted values blank instead of silently transliterating them', () => {
+test('stores Arabic patient names only in the Arabic field and does not translate Arabic diagnoses', () => {
   const fields = extractAbstractFromText('Patient Name: أحمد علي\nFinal Diagnosis: سرطان الثدي');
   assert.equal(fields.F02, undefined);
-  assert.equal(fields.F03, undefined);
+  assert.equal(fields.F03.value, 'أحمد علي');
   assert.equal(fields.F34, undefined);
 });
 

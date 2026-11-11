@@ -27,8 +27,8 @@ function captureLabel(lines, labelPattern) {
   const line = findLine(lines, new RegExp(`^\\s*(?:${labelPattern})\\s*(?:#|no\\.?|number)?\\s*[:：=\\-]\\s*(.+)$`, 'i'), { value: true });
   return line.split(/\s{2,}|\s*\|\s*/)[0].trim();
 }
-function addSuggestion(output, field, value, evidence, confidence = 'high') {
-  if (!value || !String(value).trim() || /[\u0600-\u06FF]/.test(String(value))) return;
+function addSuggestion(output, field, value, evidence, confidence = 'high', { allowArabic = false } = {}) {
+  if (!value || !String(value).trim() || (!allowArabic && /[\u0600-\u06FF]/.test(String(value)))) return;
   const cleanEvidence = String(evidence || '').replace(/\s+/g, ' ').trim().slice(0, 520);
   output[field] = { value: String(value).trim(), evidence: cleanEvidence || 'Value detected in source text; verify the full source document.', confidence };
 }
@@ -82,17 +82,22 @@ export function extractAbstractFromText(rawText) {
   const results = {};
   if (!lines.length) return results;
 
-  // Demographics and direct identifiers: only mapped when an explicit label is found.
+  // Names stay in their documented scripts: English in F02, Arabic in F03.
   const patientName = captureLabel(lines, '(?:patient\\s+)?(?:full\\s+)?name|patient\\s+name');
   const patientNameLine = lineFor(lines, /^(?:patient\s+)?(?:full\s+)?name\s*[:：=\-]/i);
-  const englishNameLine = lineFor(lines, /(?:english\s+name|name\s+in\s+english|english\s+transliteration|latin(?:\s+script)?\s+name)\s*[:：=\-]/i);
-  const englishName = captureLabel(lines, '(?:english\\s+name|name\\s+in\\s+english|english\\s+transliteration|latin(?:\\s+script)?\\s+name)');
-  if (patientName && !/[\u0600-\u06FF]/.test(patientName) && !/^(?:doctor|physician|surgeon|pathologist)/i.test(patientName)) {
-    addSuggestion(results, 'F02', patientName, patientNameLine);
-    addSuggestion(results, 'F03', englishName && !/[\u0600-\u06FF]/.test(englishName) ? englishName : patientName, englishNameLine || patientNameLine, englishName ? 'high' : 'medium');
-  } else if (englishName && !/[\u0600-\u06FF]/.test(englishName)) {
-    addSuggestion(results, 'F02', englishName, englishNameLine, 'medium');
-    addSuggestion(results, 'F03', englishName, englishNameLine, 'high');
+  const englishNameLine = lineFor(lines, /(?:english\s+name|name\s+in\s+english|latin(?:\s+script)?\s+name)\s*[:：=\-]/i);
+  const englishName = captureLabel(lines, '(?:english\\s+name|name\\s+in\\s+english|latin(?:\\s+script)?\\s+name)');
+  const arabicNameLine = lineFor(lines, /(?:arabic\s+name|name\s+in\s+arabic|اسم\s+المريض|الاسم(?:\s+الكامل)?)\s*[:：=\-]/i);
+  const arabicName = captureLabel(lines, '(?:arabic\\s+name|name\\s+in\\s+arabic|اسم\\s+المريض|الاسم(?:\\s+الكامل)?)');
+  if (englishName && !/[\u0600-\u06FF]/.test(englishName)) {
+    addSuggestion(results, 'F02', englishName, englishNameLine);
+  } else if (patientName && !/[\u0600-\u06FF]/.test(patientName) && !/^(?:doctor|physician|surgeon|pathologist)/i.test(patientName)) {
+    addSuggestion(results, 'F02', patientName, patientNameLine, 'medium');
+  }
+  if (arabicName && /[\u0600-\u06FF]/.test(arabicName)) {
+    addSuggestion(results, 'F03', arabicName, arabicNameLine, 'high', { allowArabic: true });
+  } else if (patientName && /[\u0600-\u06FF]/.test(patientName)) {
+    addSuggestion(results, 'F03', patientName, patientNameLine, 'medium', { allowArabic: true });
   }
   const mrn = captureLabel(lines, '(?:medical\\s+record\\s+(?:number|no\\.?)|MRN|chart\\s+(?:number|no\\.?))');
   if (mrn) addSuggestion(results, 'F04', mrn, lineFor(lines, /(?:medical\s+record|\bMRN\b|chart\s+(?:number|no\.?))/i));
