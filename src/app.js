@@ -374,7 +374,7 @@ function renderPipeline() {
   const steps = [
     ['Source ingestion', hasCaseFiles ? 'done' : 'done'],
     ['Reference rules selected', state.refEnabled.size || state.referenceFiles.length ? 'done' : 'running'],
-    ['PDF text extraction & field suggestions', ready ? 'done' : 'running'],
+    ['PDF text/OCR & field suggestions', ready ? 'done' : 'running'],
     ['Registrar review & correction', 'running']
   ];
   $('#pipeline-steps').innerHTML = steps.map(([label, status], index) => `<div class="pipeline-step ${status}"><span class="step-dot"></span><span>${index + 1}. ${label}${status === 'done' ? ' — complete' : status === 'running' ? ' — pending review' : ''}</span></div>`).join('');
@@ -386,10 +386,10 @@ function renderPipeline() {
       ? `${ICONS.sparkles}<span>${ready ? 'Re-extract source fields' : state.customCase ? (/\.pdf$/i.test(state.customSource?.name || '') ? 'Extract PDF & fill fields' : 'Extract source text & fill fields') : 'Extract pasted text & fill fields'}</span>`
       : `${ICONS.checkCircle}<span>Run demo validation</span>`;
   const status = state.extraction.status === 'complete'
-    ? `<div class="extraction-status success">${ICONS.checkCircle}<span>Read ${state.extraction.pages} page${state.extraction.pages === 1 ? '' : 's'} · suggested ${state.extraction.fields} field${state.extraction.fields === 1 ? '' : 's'}. Verify every suggestion and edit as needed.</span></div>`
+    ? `<div class="extraction-status success">${ICONS.checkCircle}<span>Read ${state.extraction.pages} page${state.extraction.pages === 1 ? '' : 's'}${state.extraction.ocrPages ? ` · OCR used on ${state.extraction.ocrPages} scanned page${state.extraction.ocrPages === 1 ? '' : 's'}` : ''} · suggested ${state.extraction.fields} field${state.extraction.fields === 1 ? '' : 's'}. Verify every suggestion and edit as needed.</span></div>`
     : state.extraction.status === 'error'
       ? `<div class="extraction-status error">${ICONS.alertTriangle}<span>${escapeHTML(state.extraction.message)}</span></div>`
-      : isCustom ? `<div class="extraction-status">${ICONS.shield}<span>Runs locally in your browser. No OCR for scanned PDFs; no data is uploaded.</span></div>` : `<div class="extraction-status">${ICONS.shield}<span>Built-in demo checks are illustrative; not registry certification.</span></div>`;
+      : isCustom ? `<div class="extraction-status">${ICONS.shield}<span>PDF text and scanned-page OCR run locally with bundled English/Arabic models. No patient file is sent to a server.</span></div>` : `<div class="extraction-status">${ICONS.shield}<span>Built-in demo checks are illustrative; not registry certification.</span></div>`;
   $('#pipeline-status').innerHTML = status;
 }
 
@@ -485,6 +485,14 @@ function startCustomCase(documentFile) {
   renderSourceViewer(); renderPipeline();
 }
 
+function sourcePageForEvidence(text, evidence) {
+  const excerpt = String(evidence || '').trim();
+  if (!excerpt) return null;
+  const chunk = String(text || '').split(/(?=--- PAGE \d+ \|)/g).find(part => part.toLowerCase().includes(excerpt.toLowerCase()));
+  const page = chunk?.match(/^--- PAGE (\d+) \| ([^\n]+) ---/);
+  return page ? { number: page[1], mode: page[2] } : null;
+}
+
 async function extractDocument(documentFile = state.customSource || state.documents.find(item => item.id === state.activeSource)) {
   if (!documentFile) {
     toast('Upload a text-searchable PDF to extract and suggest abstract fields.', 'warn');
@@ -501,15 +509,18 @@ async function extractDocument(documentFile = state.customSource || state.docume
   try {
     if (/\.pdf$/i.test(documentFile.name) || documentFile.type === 'application/pdf') {
       const { extractPdfText } = await import('./pdf-extractor.js');
-      const result = await extractPdfText(documentFile.file, ({ page, pages }) => {
-        state.extraction.message = `Reading PDF page ${page} of ${pages}…`;
+      const result = await extractPdfText(documentFile.file, ({ page, pages, mode, detail, progress }) => {
+        const task = mode === 'OCR' ? 'OCR' : 'reading text';
+        const percent = Number.isFinite(progress) ? ` ${Math.round(progress * 100)}%` : '';
+        state.extraction.message = `${task}: page ${page} of ${pages}${detail ? ` · ${detail}` : ''}${percent}`;
         state.extraction.pages = pages;
         renderPipeline();
       });
       text = result.text;
       documentFile.pages = result.pages;
+      documentFile.ocrPages = result.ocrPages;
     }
-    if (!text.trim()) throw new Error('No readable text was found in this document. A scanned/image PDF may require OCR, which is not enabled in this demo.');
+    if (!text.trim()) throw new Error('No readable text was found. The PDF may be blank, too faint, or handwritten; try a clearer scan or enter the field manually.');
     documentFile.text = text;
     state.customCase.recordText = text;
     const suggestions = extractAbstractFromText(text);
@@ -526,16 +537,19 @@ async function extractDocument(documentFile = state.customSource || state.docume
         state.confidence[fieldId] = 'medium';
       } else {
         if (!state.edited.has(fieldId)) state.values[fieldId] = suggestion.value;
-        state.remarks[fieldId] = `PDF excerpt: “${suggestion.evidence}”`;
+        const sourcePage = sourcePageForEvidence(text, suggestion.evidence);
+        const pageNote = sourcePage ? `PDF page ${sourcePage.number} (${sourcePage.mode}) excerpt` : 'PDF excerpt';
+        state.remarks[fieldId] = `${pageNote}: “${suggestion.evidence}”`;
         state.confidence[fieldId] = suggestion.confidence;
         state.evidenceSource[fieldId] = documentFile.id;
       }
     }
     const count = Object.keys(suggestions).length;
-    state.extraction = { status: 'complete', pages: documentFile.pages || 1, fields: count, message: '' };
+    state.extraction = { status: 'complete', pages: documentFile.pages || 1, ocrPages: documentFile.ocrPages || 0, fields: count, message: '' };
     state.processStatus = 'done';
     renderSourceViewer(); renderRibbon(); renderFilterPills(); renderSections(); renderForm(); renderValidation(); renderPipeline();
-    toast(count ? `Extracted text and proposed values for ${count} fields. Review every suggestion against the PDF.` : 'PDF text was read, but no confident field matches were found. Review the extracted text and enter values manually.', count ? 'success' : 'warn');
+    const isPdf = /\.pdf$/i.test(documentFile.name || '') || documentFile.type === 'application/pdf';
+    toast(count ? `${isPdf ? `Read ${state.extraction.pages} PDF page(s)` : 'Read the source text'} and proposed ${count} field value(s). Review every suggestion against the source.` : `The ${isPdf ? 'PDF' : 'source text'} was read, but no confident field matches were found. Review the extracted text and enter verified values manually.`, count ? 'success' : 'warn');
   } catch (error) {
     state.extraction = { status: 'error', pages: documentFile.pages || 0, fields: 0, message: error?.message || 'Could not read this document.' };
     state.processStatus = 'idle';
@@ -661,7 +675,7 @@ function syncLeftTab() {
 
 function showReferences() {
   const manuals = BUILTIN_REFERENCE_MANUALS.map(manual => `<div class="rule-block"><h4>${escapeHTML(manual.fullName)}</h4>${manual.rules.map(rule => `<div style="padding:8px 0;border-top:1px solid #e2e8f0"><strong style="color:#334155">${escapeHTML(rule.title)}</strong><p style="margin-top:4px">${escapeHTML(rule.body)}</p></div>`).join('')}</div>`).join('');
-  const notes = `<div class="rule-block" style="background:#fffbeb;border-color:#fde68a"><h4 style="color:#b45309">Important limitations</h4><p>Text-searchable PDFs are extracted locally in your browser with PDF.js, then deterministic rules propose field values from explicit source text. The interface and abstract labels are English; source evidence is quoted verbatim. This is not an LLM, OCR, authoritative coding engine, or registry service. Suggestions may be incomplete or wrong; verify every field with the source and a qualified registrar.</p><p style="margin-top:8px"><strong>Privacy:</strong> PDF bytes and extracted text are not sent to this app's server. Use only records approved by your organization's privacy and security policies.</p></div>`;
+  const notes = `<div class="rule-block" style="background:#fffbeb;border-color:#fde68a"><h4 style="color:#b45309">Important limitations</h4><p>Text-searchable PDF pages are read locally with PDF.js; scanned pages with little selectable text are rendered in the browser and read with bundled English and Arabic OCR models. Deterministic rules then propose field values from extracted text. OCR does not translate Arabic and may misread low-quality scans, handwriting, or complex layouts. The interface and abstract labels are English; source evidence is quoted verbatim. This is not an LLM, authoritative coding engine, or registry service. Suggestions may be incomplete or wrong; human review against the original source by a qualified registrar is required.</p><p style="margin-top:8px"><strong>Privacy:</strong> PDF bytes and extracted text are not sent to this app's server. Use only records approved by your organization's privacy and security policies.</p></div>`;
   openModal('Reference standards & illustrative rules', `${notes}${manuals}`);
 }
 function openModal(title, html) {
