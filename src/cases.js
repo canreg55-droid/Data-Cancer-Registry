@@ -4,7 +4,7 @@
 const common = {
   'H02': '2024', 'H03': '202400184', 'H04': 'CTR-017',
   'H05': 'Tripoli Central Oncology Institute (F-TRI-01)',
-  'F05': 'Tripoli Center (طرابلس المركز)', 'F06': 'Bab Ben Ghashir (باب بن غشير)',
+  'F05': 'Tripoli Center', 'F06': 'Bab Ben Ghashir',
   'F07': '001/03 - Tripoli Center', 'F08': '1 - Urban (City / Metropolitan)',
   'F09': '+218 91 555 0184', 'F11': 'Tripoli, Libya', 'F14': 'Libyan - LBY',
   'F15': '2 - Married', 'F16': '5 - University / Bachelor Degree',
@@ -42,8 +42,8 @@ function createCase(id, title, subtitle, overrides, evidence, recordText, tags =
 
 export const DEMO_CASES = [
   createCase('sclc', 'Small Cell Lung Carcinoma', 'Extensive-stage SCLC • fictional 67-year-old man', {
-    'F01': '119870001842', 'F02': 'Omar Khalifa Saleh Al-Misrati', 'F03': 'عمر خليفة صالح المصراتي',
-    'F04': 'MRN-24-SCLC-184', 'F06': 'Al-Dahra (الظهرة)', 'F07': '001/08 - Al-Dahra',
+    'F01': '119870001842', 'F02': 'Omar Khalifa Saleh Al-Misrati', 'F03': 'Omar Khalifa Saleh Al-Misrati',
+    'F04': 'MRN-24-SCLC-184', 'F06': 'Al-Dahra', 'F07': '001/08 - Al-Dahra',
     'F09': '+218 91 555 0184', 'F10': '22/08/1957', 'F11': 'Misrata, Libya', 'F12': '66',
     'F13': '1 - Male', 'F15': '2 - Married', 'F16': '3 - Secondary / High School',
     'F17': 'Retired port worker; 42 pack-years', 'F18': '2 - Former Cigarette Smoker (Quit >= 1 yr)',
@@ -82,8 +82,8 @@ export const DEMO_CASES = [
   }, 'TRIPOLI CENTRAL ONCOLOGY INSTITUTE — SYNTHETIC DEMONSTRATION RECORD\n\nPatient: Omar Khalifa Saleh Al-Misrati | MRN-24-SCLC-184 | DOB 22/08/1957 | Sex: Male\n\n06/02/2024 — Contrast CT chest: 5.8 cm right upper-lobe hilar mass, encasing segmental bronchus; bulky right paratracheal and subcarinal lymphadenopathy. Multiple low-attenuation liver lesions.\n\n08/02/2024 — CT-guided core biopsy, right upper lobe. Small cell neuroendocrine carcinoma. Synaptophysin+, INSM1+, chromogranin focal+, TTF-1+, Ki-67 ~85%.\n\n12/02/2024 — PET-CT: avid primary lesion, mediastinal nodes, multiple hepatic and osseous deposits. Clinical assessment: cT3 cN3 cM1c, extensive-stage disease.\n\n26/02/2024 — Cycle 1 carboplatin, etoposide and durvalumab initiated; palliative intent.\n\n12/09/2024 — Oncology follow-up: tolerating therapy, alive. Record is entirely fictional; dates and identifiers are synthetic.', ['Lung', 'SCLC', 'AJCC 8']),
 
   createCase('breast', 'Invasive Ductal Carcinoma — Breast', 'IDC, ER+/HER2− • fictional 54-year-old woman', {
-    'F01': '119700002516', 'F02': 'Amina Mahmoud Yousef Al-Werfalli', 'F03': 'أمينة محمود يوسف الورفلي',
-    'F04': 'MRN-24-BR-2516', 'F06': 'Fashloum (فشلوم)', 'F07': '001/12 - Fashloum',
+    'F01': '119700002516', 'F02': 'Amina Mahmoud Yousef Al-Werfalli', 'F03': 'Amina Mahmoud Yousef Al-Werfalli',
+    'F04': 'MRN-24-BR-2516', 'F06': 'Fashloum', 'F07': '001/12 - Fashloum',
     'F09': '+218 92 444 2516', 'F10': '04/11/1969', 'F11': 'Tripoli, Libya', 'F12': '54',
     'F13': '2 - Female', 'F15': '2 - Married', 'F16': '5 - University / Bachelor Degree',
     'F17': 'Accountant', 'F18': '0 - Never Smoker (<100 lifetime cigarettes)',
@@ -120,8 +120,8 @@ export const DEMO_CASES = [
   }, 'TRIPOLI CENTRAL ONCOLOGY INSTITUTE — SYNTHETIC DEMONSTRATION RECORD\n\nPatient: Amina Mahmoud Yousef Al-Werfalli | MRN-24-BR-2516 | DOB 04/11/1969 | Sex: Female\n\n18/03/2024 — Mammogram/ultrasound: 2.1 cm irregular mass, left breast upper-outer quadrant; axilla unremarkable.\n\n21/03/2024 — Core needle biopsy: invasive carcinoma, no special type (ductal), Nottingham grade 2. ER 95%, PR 70%, HER2 IHC 1+ (negative), Ki-67 18%.\n\n29/03/2024 — MRI: solitary 2.2 cm enhancing lesion, no multifocal or contralateral disease.\n\n16/04/2024 — Left lumpectomy and sentinel node biopsy: 2.2 cm invasive carcinoma, margins negative, 0/3 nodes; pT2 pN0(sn). Oncotype DX RS 13.\n\nRadiation: 40.05 Gy in 15 fractions completed 18/06/2024. Letrozole started 20/06/2024, curative adjuvant intent.\n\nFollow-up 12/09/2024: no evidence of recurrence. Synthetic case; no real patient data.', ['Breast', 'IDC', 'AJCC 8']),
 
   createCase('hodgkin', 'Classical Hodgkin Lymphoma', 'Nodular sclerosis • fictional 29-year-old woman', {
-    'F01': '119950000731', 'F02': 'Sara Fathi Ibrahim Al-Zawawi', 'F03': 'سارة فتحي إبراهيم الزاوي',
-    'F04': 'MRN-24-HL-0731', 'F06': 'Gargaresh (قرقارش)', 'F07': '001/15 - Gargaresh',
+    'F01': '119950000731', 'F02': 'Sara Fathi Ibrahim Al-Zawawi', 'F03': 'Sara Fathi Ibrahim Al-Zawawi',
+    'F04': 'MRN-24-HL-0731', 'F06': 'Gargaresh', 'F07': '001/15 - Gargaresh',
     'F10': '15/06/1995', 'F12': '28', 'F13': '2 - Female',
     'F16': '6 - Postgraduate (Master / PhD / MD)', 'F17': 'Graduate student',
     'F21': '14 - Analytic: Dx & all 1st course Rx at reporting facility',
@@ -155,7 +155,7 @@ export const DEMO_CASES = [
   }, 'TRIPOLI CENTRAL ONCOLOGY INSTITUTE — SYNTHETIC DEMONSTRATION RECORD\n\nPatient: Sara Fathi Ibrahim Al-Zawawi | MRN-24-HL-0731 | DOB 15/06/1995 | Sex: Female\n\n28/04/2024 — PET/CT: FDG-avid bulky anterior mediastinal mass (11.2 cm), bilateral hilar and lower cervical nodes; no disease below diaphragm.\n\n02/05/2024 — Excisional cervical lymph node biopsy: classical Hodgkin lymphoma, nodular sclerosis subtype. CD30+, CD15+, weak PAX5+, CD45−.\n\nClinical: Fever to 38.5 °C, drenching night sweats, 11% weight loss over 6 months. Ann Arbor/Lugano Stage IIBX.\n\n17/05/2024 — Curative ABVD initiated. Interim PET after 2 cycles: complete metabolic response; bleomycin omitted for cycles 3–6. Planned ISRT 30 Gy/15 fractions.\n\n12/09/2024 — In treatment, alive. This fictional record is for software demonstration only.', ['Lymphoma', 'Hodgkin', 'Lugano']),
 
   createCase('prostate', 'Prostate Adenocarcinoma', 'Acinar adenocarcinoma • fictional 71-year-old man', {
-    'F01': '119530001129', 'F02': 'Mustafa Ali Ramadan Al-Tarhouni', 'F03': 'مصطفى علي رمضان الترهوني',
+    'F01': '119530001129', 'F02': 'Mustafa Ali Ramadan Al-Tarhouni', 'F03': 'Mustafa Ali Ramadan Al-Tarhouni',
     'F04': 'MRN-24-PR-1129', 'F10': '09/02/1953', 'F12': '71', 'F13': '1 - Male',
     'F15': '2 - Married', 'F16': '2 - Preparatory / Middle School', 'F17': 'Retired civil engineer',
     'F18': '0 - Never Smoker (<100 lifetime cigarettes)', 'F19': '0 - Negative (No known family history of malignancy)',
@@ -186,7 +186,7 @@ export const DEMO_CASES = [
   }, 'TRIPOLI CENTRAL ONCOLOGY INSTITUTE — SYNTHETIC DEMONSTRATION RECORD\n\nPatient: Mustafa Ali Ramadan Al-Tarhouni | MRN-24-PR-1129 | DOB 09/02/1953 | Sex: Male\n\n08/06/2024 — PSA 27.6 ng/mL. Multiparametric MRI: PI-RADS 5, 2.8 cm lesion in left peripheral zone, focal extracapsular extension, no seminal vesicle invasion or pelvic nodes.\n\n12/06/2024 — Transperineal prostate biopsy: acinar adenocarcinoma, Gleason 4+4=8, Grade Group 4; 8/14 cores positive.\n\n20/06/2024 — Bone scan negative for osseous metastases. cT3a cN0 cM0.\n\n27/06/2024 — Leuprolide initiated; definitive IMRT 70 Gy in 28 fractions completed 23/08/2024. Curative intent.\n\n12/09/2024 — Follow-up, PSA response documented, alive. Entire case is fictitious.', ['Prostate', 'Adenocarcinoma', 'AJCC 8']),
 
   createCase('endometrial', 'Endometrioid Carcinoma — Endometrium', 'Endometrial adenocarcinoma • fictional 62-year-old woman', {
-    'F01': '119620001944', 'F02': 'Najwa Salem Faraj Al-Qaddafi', 'F03': 'نجوى سالم فرج القذافي',
+    'F01': '119620001944', 'F02': 'Najwa Salem Faraj Al-Qaddafi', 'F03': 'Najwa Salem Faraj Al-Qaddafi',
     'F04': 'MRN-24-EN-1944', 'F10': '27/03/1962', 'F12': '62', 'F13': '2 - Female',
     'F15': '3 - Widowed', 'F17': 'Retired teacher', 'F21': '14 - Analytic: Dx & all 1st course Rx at reporting facility',
     'F25': '18/07/2024', 'F26': '09/07/2024', 'F29': 'AP-24-1944 / 09/07/2024',
@@ -212,7 +212,7 @@ export const DEMO_CASES = [
   }, 'TRIPOLI CENTRAL ONCOLOGY INSTITUTE — SYNTHETIC DEMONSTRATION RECORD\n\nPatient: Najwa Salem Faraj Al-Qaddafi | MRN-24-EN-1944 | DOB 27/03/1962 | Sex: Female\n\n03/07/2024 — Pelvic ultrasound: 15 mm endometrial stripe.\n\n09/07/2024 — Endometrial biopsy: endometrioid adenocarcinoma, FIGO grade 1.\n\n16/07/2024 — Pelvic MRI: lesion confined to endometrium; no myometrial invasion, cervical extension or adenopathy.\n\n25/07/2024 — Total hysterectomy, BSO, sentinel pelvic node mapping: 1.3 cm tumor; no myometrial invasion/LVSI, negative cervix and adnexa; 0/4 nodes. pT1a pN0, FIGO IA. No adjuvant treatment recommended.\n\n12/09/2024 — Postoperative follow-up, alive, no evidence of disease. Synthetic demonstration record.', ['Gynecologic', 'Endometrial', 'FIGO']),
 
   createCase('fibroadenoma', 'Benign Fibroepithelial Breast Mass', 'Benign example • intentionally not reportable under most population rules', {
-    'F01': '119900001508', 'F02': 'Laila Hassan Salem Al-Mabrouk', 'F03': 'ليلى حسن سالم المبروك',
+    'F01': '119900001508', 'F02': 'Laila Hassan Salem Al-Mabrouk', 'F03': 'Laila Hassan Salem Al-Mabrouk',
     'F04': 'MRN-24-FA-1508', 'F10': '30/01/1990', 'F12': '34', 'F13': '2 - Female',
     'F21': '34 - Non-Analytic: Not required by CoC/ISCR (e.g., Benign non-CNS /0)',
     'F25': '10/08/2024', 'F26': '06/08/2024', 'F29': 'AP-24-1508 / 06/08/2024',
@@ -239,7 +239,7 @@ export const DEMO_CASES = [
   }, 'TRIPOLI CENTRAL ONCOLOGY INSTITUTE — SYNTHETIC DEMONSTRATION RECORD\n\nPatient: Laila Hassan Salem Al-Mabrouk | MRN-24-FA-1508 | DOB 30/01/1990 | Sex: Female\n\n04/08/2024 — Breast ultrasound: 1.7 cm circumscribed oval parallel right upper-outer quadrant mass, BI-RADS 3.\n\n06/08/2024 — Vacuum-assisted excision: conventional fibroadenoma, no atypia or malignancy. Behavior /0.\n\nRegistry note: benign non-CNS breast neoplasm; typically non-reportable to population cancer registries. This example is for training/QA only and must not be represented as a reportable cancer case. No cancer-directed treatment. All details fictional.', ['Benign', 'Reportability', 'Education']),
 
   createCase('myeloma', 'Plasma Cell Myeloma', 'Multiple myeloma • fictional 63-year-old man', {
-    'F01': '119610000392', 'F02': 'Yousef Ahmed Mansour Al-Badri', 'F03': 'يوسف أحمد منصور البدري',
+    'F01': '119610000392', 'F02': 'Yousef Ahmed Mansour Al-Badri', 'F03': 'Yousef Ahmed Mansour Al-Badri',
     'F04': 'MRN-24-MM-0392', 'F10': '01/12/1960', 'F12': '63', 'F13': '1 - Male',
     'F21': '14 - Analytic: Dx & all 1st course Rx at reporting facility', 'F25': '07/09/2024',
     'F26': '29/08/2024', 'F29': 'BM-24-0392 / 29/08/2024', 'F31': 'Bone marrow', 'F32': 'C42.1 - Bone marrow',

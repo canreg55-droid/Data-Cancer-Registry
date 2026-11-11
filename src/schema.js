@@ -1,5 +1,5 @@
 /* ==========================================================================
-   OncoCurate Schema, Lucide SVG Icons & Reference Guideline Knowledge Base
+   Cancer Registry Office — Data Extraction Schema, SVG Icons & Reference Guide Summaries
    Covers Section 0 (5 Admin Fields) + Sections I–VII (60 Numbered Fields)
    ========================================================================== */
 
@@ -209,10 +209,10 @@ export const SCHEMA_FIELDS = [
   },
   {
     id: 'F03', code: '03', section: 'sec1',
-    name: 'Arabic Name (Strict Arabic script)',
+    name: 'Full Name (English Transliteration)',
     standard: 'NCR Core',
-    type: 'text', arabic: true, required: true,
-    hint: 'الاسم الرباعي باللغة العربية فقط (Strict Unicode Arabic script)'
+    type: 'text', required: true,
+    hint: 'Full legal name in Latin/English characters; use the documented English spelling and verify against the source identity record.'
   },
   {
     id: 'F04', code: '04', section: 'sec1',
@@ -227,23 +227,23 @@ export const SCHEMA_FIELDS = [
     standard: 'NCR Geo',
     type: 'select', required: true,
     options: [
-      'Tripoli Center (طرابلس المركز)',
-      'Hay Al-Andalus (حي الأندلس)',
-      'Tajoura (تاجوراء)',
-      'Janzour (جنزور)',
-      'Ain Zara (عين زارة)',
-      'Souq Al-Jumaa (سوق الجمعة)',
-      'Abu Salim (أبو سليم)',
-      'Benghazi (بنغازي)',
-      'Misrata (مصراتة)',
-      'Sabratha (صبراتة)',
-      'Zawiya (الزاوية)',
-      'Zliten (زليتن)',
-      'Gharyan (غريان)',
-      'Sebha (سبها)',
-      'Sirte (سرت)',
-      'Derna (درنة)',
-      'Tobruk (طبرق)',
+      'Tripoli Center',
+      'Hay Al-Andalus',
+      'Tajoura',
+      'Janzour',
+      'Ain Zara',
+      'Souq Al-Jumaa',
+      'Abu Salim',
+      'Benghazi',
+      'Misrata',
+      'Sabratha',
+      'Zawiya',
+      'Zliten',
+      'Gharyan',
+      'Sebha',
+      'Sirte',
+      'Derna',
+      'Tobruk',
       'Out-of-Region / International Referral',
       '99 - Unknown'
     ],
